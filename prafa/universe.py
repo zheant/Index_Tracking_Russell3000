@@ -2,13 +2,6 @@ import pandas as pd
 from datetime import datetime
 import numpy as np
 
-#_________________________________________________________________
-#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-#          Lorsque je vais avoir des données bloombergs , faire attention 
-#          les stocks dans stocks_list sont sensé etre tous dans le df_all
-#          on ne devrait pas changer les tickers bloomberg toujours les meme en theorie 
-#-----------------------------------------------------------------
-#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
 
@@ -100,9 +93,11 @@ class Universe():
             print(f"⚠️ Les actions suivantes ne sont pas dans les données de rendement : {missing_stocks}")
         self.stock_list = valid_stocks
         
-    
+        
+        # On trie self.stock_list selon l'ordre des colonnes de df_return_all
+        ordered_stocks = [stock for stock in self.df_return_all.columns if stock in self.stock_list]
         #retourne les stocks de l'univers au bonne periode de temps
-        self.df_return = self.df_return_all.loc[start_datetime:end_datetime, self.stock_list].copy().fillna(0)
+        self.df_return = self.df_return_all.loc[start_datetime:end_datetime, ordered_stocks].copy().fillna(0)
         self.df_index = self.df_index_all.loc[start_datetime:end_datetime].copy().fillna(0)
         #self.data_cleaning()
         self.stock_list = list(self.df_return.columns)

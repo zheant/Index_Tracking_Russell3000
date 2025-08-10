@@ -1,5 +1,7 @@
 import numpy as np
 from prafa.universe import Universe
+from prafa.quob import QUOB
+from prafa.gurobi import Gurobi
 from datetime import datetime
 import time
 import pandas as pd
@@ -74,8 +76,8 @@ class Solution:
         #self.new_return = np.array(self.universe.get_stocks_returns())
         #self.new_index = np.array(self.universe.get_index_returns())
         
-        self.new_return = self.universe.get_stocks_returns()
-        self.new_index = self.universe.get_index_returns()
+        self.new_return = self.universe.get_stocks_returns().values
+        self.new_index = self.universe.get_index_returns().values
         self.stock_list = self.universe.get_stock_namme_in_order()
         
         
@@ -94,7 +96,7 @@ class Solution:
         weight : list,
     ) -> list :
         # 누적 수익률
-        error = self.new_return.values @ weight - self.new_index.values
+        error = self.new_return @ weight - self.new_index
         error = np.sum(error**2)
         
         return error# + 1000 * self.penalty(weight) #! ablation 
@@ -142,7 +144,7 @@ class Solution:
         # Optimization
         result = minimize(self.objective_function, initial_weight, method = 'SLSQP', constraints=constraint, bounds=bounds)
         weights = pd.Series(result.x, index=self.new_return.columns)
-        return weights
+        return weights 
 
     
     def lagrange_partial_ours(
@@ -231,11 +233,21 @@ class Solution:
     
     
 
+    def quob(self):
+        obj = QUOB(self.new_return, self.new_index, self.universe.args.cardinality)
+        return obj.get_weights()
+    
+    def quob_cor(self):
+        obj = QUOB(self.new_return, self.new_index, self.universe.args.cardinality, simple_corr=True)
+        return obj.get_weights()
 
- 
+    def gurobi(self):
+        obj = Gurobi(self.new_return, self.new_index, self.universe.args.cardinality, simple_corr=False)
+        return obj.get_weights()
     
-    
-        
+    def gurobi_cor(self):
+        obj = Gurobi(self.new_return, self.new_index, self.universe.args.cardinality, simple_corr=True)
+        return obj.get_weights()
 
     def lagrange_partial_forward(
         self
@@ -376,8 +388,14 @@ class Solution:
             weights = self.lagrange_full_replication()
         elif solution_name == 'lagrange_ours':
             weights = self.lagrange_partial_ours()
-        elif solution_name == 'lagrange_ours_m':
-            weights = self.lagrange_ours_m()
+        elif solution_name == 'quob':
+            weights = self.quob()
+        elif solution_name == 'quob_cor':
+            weights = self.quob_cor()
+        elif solution_name == 'gurobi':
+            weights = self.gurobi()
+        elif solution_name == 'gurobi_cor':
+            weights = self.gurobi_cor()
         elif solution_name == 'lagrange_forward':
             weights = self.lagrange_partial_forward()
         elif solution_name == 'lagrange_backward':
