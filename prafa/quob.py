@@ -16,6 +16,8 @@ class QUOB:
         self.num_cores_per_controller = num_cores_per_controller
         self.time_limit = time_limit
         self.idx = None #liste d'indice des stonks choisit
+        self.dist_dir = Path(__file__).resolve().parent / "dist_matrix"
+        self.dist_dir.mkdir(parents=True, exist_ok=True)
 
         #construire ma matrice de distance
         if simple_corr or distance_method == 'pearson':
@@ -38,7 +40,8 @@ class QUOB:
                 dist = 1 - dcor_val
                 dcor_mat[i, j] = dcor_mat[j, i] = Welsch_function(dist) #Welsch_function(dist)
     
-        np.savetxt("dist_matrix.d", dcor_mat)
+        np.savetxt(self.dist_dir / "dist_matrix.d", dcor_mat)
+        np.savetxt(self.dist_dir / "dist_matrix.adj", np.ones((n, n), dtype=int) - np.eye(n, dtype=int), fmt="%d")
         
 
 
@@ -50,7 +53,8 @@ class QUOB:
         corr_matrix = np.corrcoef(self.stocks_returns, rowvar=False)
         
         distance_matrix = distance_func(corr_matrix)
-        np.savetxt("dist_matrix.d", Welsch_function(distance_matrix))
+        np.savetxt(self.dist_dir / "dist_matrix.d", Welsch_function(distance_matrix))
+        np.savetxt(self.dist_dir / "dist_matrix.adj", np.ones((n, n), dtype=int) - np.eye(n, dtype=int), fmt="%d")
 
 
     def stock_picking(self, n):
@@ -63,7 +67,7 @@ class QUOB:
                 num_k {self.K} #INT number of medoids/exemplars
                 B_scale_factor {0.0333} 0.5*(self.K+1)/n#FLOAT32 scaling factor for model bias, set to 0.5*(num_k +1)/num_vars
                 D_scale_factor 1.0 #FLOAT32 scaling factor for model distances, leave at 1
-                problem_path {dist_dir}/
+                problem_path {self.dist_dir}/
                 problem_name dist_matrix
                 cost_answer -1000000 #FLOAT32 target cost to allow program to exit early if found, set to large neg value if you don't want an early exit
                 T_max 0.01 #FLOAT32 parallel tempering max temperature
@@ -76,7 +80,7 @@ class QUOB:
                 ladder_init_mode 2 #INT (0,1,2) parallel tempering ladder init mode. 0->linear spacing b/w t_min & t_max. 1->linear spacing between beta_max and beta_min, then translated to T. 2->exponential spacing between T_min and T_max
                 """
 
-        params_path = dist_dir / "dist_matrix.params"
+        params_path = self.dist_dir / "dist_matrix.params"
         with params_path.open("w") as f:
             f.write(param)
 
@@ -85,7 +89,7 @@ class QUOB:
 
 
         #lire le résultat et le mettre en liste
-        with (dist_dir / "dist_matrix.soln.txt").open("r") as f:
+        with (self.dist_dir / "dist_matrix.soln.txt").open("r") as f:
             ligne = f.read()
 
         return [int(x) for x in ligne.strip().split()]
