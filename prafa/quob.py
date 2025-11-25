@@ -52,8 +52,17 @@ class QUOB:
         Welsch_function = lambda x : 1 - np.exp(-0.5 * x)
 
         n = self.stocks_returns.shape[1]
-        corr_matrix = np.corrcoef(self.stocks_returns, rowvar=False)
-        
+
+        # Replace NaN/inf returns before computing correlations to avoid
+        # runtime warnings from zero-variance slices; the downstream
+        # nan_to_num keeps the distances well-defined.
+        cleaned_returns = np.nan_to_num(
+            self.stocks_returns, nan=0.0, posinf=0.0, neginf=0.0
+        )
+
+        with np.errstate(invalid="ignore", divide="ignore"):
+            corr_matrix = np.corrcoef(cleaned_returns, rowvar=False)
+
         distance_matrix = distance_func(corr_matrix)
         safe_distance = np.nan_to_num(distance_matrix, nan=1.0, posinf=1.0, neginf=1.0)
 
