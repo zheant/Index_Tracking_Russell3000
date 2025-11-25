@@ -18,6 +18,9 @@ def Main():
     parser.add_argument('--solution_name', type=str,
                     default='quob')#,] choices=['quob_cor', 'quob',  'gurobi', 'lagrange_backward'])
 
+    parser.add_argument('--replicator_cores', type=int, default=8,
+                    help='Number of OpenMP threads for ReplicaTOR (num_cores_per_controller)')
+
     parser.add_argument('--cardinality', type=int, default=300)
 
     # Select the Data to Use

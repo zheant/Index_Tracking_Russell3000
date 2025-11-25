@@ -234,11 +234,22 @@ class Solution:
     
 
     def quob(self):
-        obj = QUOB(self.new_return, self.new_index, self.universe.args.cardinality)
+        obj = QUOB(
+            self.new_return,
+            self.new_index,
+            self.universe.args.cardinality,
+            num_cores_per_controller=self.universe.args.replicator_cores,
+        )
         return obj.get_weights()
-    
+
     def quob_cor(self):
-        obj = QUOB(self.new_return, self.new_index, self.universe.args.cardinality, simple_corr=True)
+        obj = QUOB(
+            self.new_return,
+            self.new_index,
+            self.universe.args.cardinality,
+            simple_corr=True,
+            num_cores_per_controller=self.universe.args.replicator_cores,
+        )
         return obj.get_weights()
 
     def gurobi(self):
