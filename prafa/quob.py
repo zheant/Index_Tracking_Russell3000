@@ -89,8 +89,11 @@ class QUOB:
             f.write(param)
 
         replicator_binary = Path.home() / "or_tool/ReplicaTOR/cmake-build/ReplicaTOR"
-        subprocess.run([str(replicator_binary), str(params_path)])
-
+        result = subprocess.run(
+            [str(replicator_binary), str(params_path)],
+            capture_output=True,
+            text=True,
+        )
 
         #lire le résultat et le mettre en liste
         soln_path_txt = self.dist_dir / "dist_matrix.soln.txt"
@@ -100,7 +103,27 @@ class QUOB:
             soln_path_noext.rename(soln_path_txt)
 
         if not soln_path_txt.exists():
-            raise FileNotFoundError(f"ReplicaTOR solution file not found at {soln_path_txt}")
+            # ReplicaTOR sometimes prints the cluster assignments to stdout
+            # without materialising the .soln file; try to recover them.
+            stdout = result.stdout or ""
+            marker = "Cluster Assignments"
+
+            if marker in stdout:
+                assignments = stdout.split(marker, 1)[1]
+                assignments = assignments.split("FILE", 1)[0]
+                numbers = [int(x) for x in assignments.split() if x.isdigit()]
+
+                if numbers:
+                    soln_path_txt.write_text(" ".join(map(str, numbers)))
+
+            if not soln_path_txt.exists():
+                stderr = result.stderr.strip()
+                raise FileNotFoundError(
+                    f"ReplicaTOR solution file not found at {soln_path_txt}.\n"
+                    f"Return code: {result.returncode}\n"
+                    f"Stdout: {result.stdout}\n"
+                    f"Stderr: {stderr}"
+                )
 
         with soln_path_txt.open("r") as f:
             ligne = f.read()
