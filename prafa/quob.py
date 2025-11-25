@@ -64,6 +64,9 @@ class QUOB:
     def stock_picking(self, n):
         #résolution du probleme d'optimisation 
         #retourne une liste d'indice des stonks sélectionné
+        dist_dir = Path(__file__).resolve().parent / "dist_matrix"
+        dist_dir.mkdir(parents=True, exist_ok=True)
+
         param = f"""num_vars {n} #INT number of variables/nodes
                 num_k {self.K} #INT number of medoids/exemplars
                 B_scale_factor {0.0333} 0.5*(self.K+1)/n#FLOAT32 scaling factor for model bias, set to 0.5*(num_k +1)/num_vars
