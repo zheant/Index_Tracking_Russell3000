@@ -104,40 +104,65 @@ class QUOB:
             text=True,
         )
 
-        #lire le résultat et le mettre en liste
+        # Persist stdout for debugging and fallback parsing when no .soln file
+        # is produced by ReplicaTOR.
+        stdout = result.stdout or ""
+        (self.dist_dir / "dist_matrix_replicator_stdout.log").write_text(stdout)
+
         soln_path_txt = self.dist_dir / "dist_matrix.soln.txt"
         soln_path_noext = self.dist_dir / "dist_matrix.soln"
 
         if not soln_path_txt.exists() and soln_path_noext.exists():
             soln_path_noext.rename(soln_path_txt)
 
-        if not soln_path_txt.exists():
-            # ReplicaTOR sometimes prints the cluster assignments to stdout
-            # without materialising the .soln file; try to recover them.
-            stdout = result.stdout or ""
-            marker = "Cluster Assignments"
+        def parse_medoids_from_stdout(raw_stdout):
+            marker = "K Medoid Indices:"
+            if marker not in raw_stdout:
+                return None
 
-            if marker in stdout:
-                assignments = stdout.split(marker, 1)[1]
-                assignments = assignments.split("FILE", 1)[0]
-                numbers = [int(x) for x in assignments.split() if x.isdigit()]
+            medoid_block = raw_stdout.split(marker, 1)[1]
+            # Stop before the cluster assignments section if present.
+            for stop_marker in ("Cluster Assignments", "FILE"):
+                if stop_marker in medoid_block:
+                    medoid_block = medoid_block.split(stop_marker, 1)[0]
+            medoids = [
+                int(x)
+                for x in medoid_block.replace("\n", " ").split()
+                if x.lstrip("-").isdigit()
+            ]
+            return medoids if len(medoids) >= self.K else None
 
-                if numbers:
-                    soln_path_txt.write_text(" ".join(map(str, numbers)))
-
+        def read_solution_numbers():
             if not soln_path_txt.exists():
-                stderr = result.stderr.strip()
-                raise FileNotFoundError(
-                    f"ReplicaTOR solution file not found at {soln_path_txt}.\n"
-                    f"Return code: {result.returncode}\n"
-                    f"Stdout: {result.stdout}\n"
-                    f"Stderr: {stderr}"
-                )
+                return None
+            numbers = [int(x) for x in soln_path_txt.read_text().strip().split() if x]
+            return numbers if numbers else None
 
-        with soln_path_txt.open("r") as f:
-            ligne = f.read()
+        numbers = read_solution_numbers()
 
-        return [int(x) for x in ligne.strip().split()]
+        # If the solution file exists but is truncated, rebuild it from stdout.
+        if numbers is not None and len(numbers) != self.K:
+            stdout_medoids = parse_medoids_from_stdout(stdout)
+            if stdout_medoids:
+                soln_path_txt.write_text(" ".join(map(str, stdout_medoids[: self.K])))
+                numbers = stdout_medoids[: self.K]
+
+        if numbers is None:
+            stdout_medoids = parse_medoids_from_stdout(stdout)
+            if stdout_medoids:
+                soln_path_txt.write_text(" ".join(map(str, stdout_medoids[: self.K])))
+                numbers = stdout_medoids[: self.K]
+
+        if numbers is None:
+            stderr = result.stderr.strip()
+            raise FileNotFoundError(
+                f"ReplicaTOR solution file not found at {soln_path_txt}.\n"
+                f"Return code: {result.returncode}\n"
+                f"Stdout: {stdout}\n"
+                f"Stderr: {stderr}"
+            )
+
+        return numbers[: self.K]
 
 
     def calc_weights(self):
