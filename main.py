@@ -24,7 +24,7 @@ def Main():
     parser.add_argument('--time_limit', type=float, default=300,
                     help='Time limit in seconds for solver runs')
 
-    parser.add_argument('--distance_method', type=str, choices=['dcor', 'pearson'], default='dcor',
+    parser.add_argument('--distance_method', type=str, choices=['dcor', 'pearson'], default='pearson',
                     help='Distance metric to build correlation matrix')
 
     parser.add_argument('--cardinality', type=int, default=300)

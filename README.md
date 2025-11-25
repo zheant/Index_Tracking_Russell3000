@@ -32,17 +32,26 @@ The methodology is unchanged from the S&P 500 experiments (50 exemplars using k-
 
    The script prompts for WRDS credentials and will reuse your configured ~/.pgpass if present.
 
-4. **Run the optimisation pipeline** (defaults to Russell 3000, 300 exemplars, 3-year training window, yearly rebalancing). The flag `--replicator_cores` controls the OpenMP threads used by ReplicaTOR (8 on the c6i.2xlarge example below). The solver time limit and distance metric are also configurable:
+4. **Run the optimisation pipeline** (defaults to Russell 3000, 300 exemplars, 3-year training window, yearly rebalancing). The flag `--replicator_cores` controls the OpenMP threads used by ReplicaTOR (8 on the c6i.2xlarge example below). The solver time limit is configurable and the distance metric now defaults to Pearson correlation:
 
    ```bash
    python main.py --solution_name quob --cardinality 300 --index russell3000 \
        --start_date 2014-01-02 --end_date 2023-12-31 --rebalancing 12 --T 3 \
-       --replicator_cores 8 --time_limit 300 --distance_method dcor
+       --replicator_cores 8 --time_limit 300 --distance_method pearson
    ```
 
    Swap `--solution_name gurobi` (or `quob_cor`, `gurobi_cor`, `lagrange_backward`, etc.) to compare optimisation approaches without changing the surrounding workflow.
 
    * `--time_limit` sets the maximum solve time (seconds) for both ReplicaTOR and Gurobi.
-   * `--distance_method` chooses between distance correlation (`dcor`) and Pearson correlation (`pearson`) when building the distance matrix used by the solvers.
+   * `--distance_method` chooses between distance correlation (`dcor`) and Pearson correlation (`pearson`) when building the distance matrix used by the solvers (default `pearson`).
 
    ReplicaTOR is expected at `~/or_tool/ReplicaTOR/cmake-build/ReplicaTOR`; adjust that path in `prafa/quob.py` if your binary lives elsewhere.
+
+5. **Analyse Russell 3000 results (matches `analyses_resultats.ipynb`)**. After running QUBO/ReplicaTOR and/or Gurobi, generate the cumulative returns, tracking errors, absolute errors, and error distributions using the same methodology as the notebook:
+
+   ```bash
+   python scripts/analyze_results.py --index russell3000 --cardinality 300 \
+       --solvers quob gurobi --output_dir results/analysis
+   ```
+
+   Adjust `--solvers` to `quob` or `gurobi` if you only want one method, and change `--result_path` if your portfolio pickles live elsewhere.
