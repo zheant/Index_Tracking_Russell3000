@@ -6,10 +6,13 @@ This repository contains my research project completed during my Summer 2025 int
 
 The methodology is unchanged from the S&P 500 experiments (50 exemplars using k-medoids vs. Gurobi); the defaults below only adjust the data source to the Russell 3000 and set the portfolio size to 300 exemplars.
 
-1. **Install Python dependencies** (inside your virtual environment):
+1. **Create and activate a Python virtual environment, then install dependencies:**
 
    ```bash
-   pip install pandas wrds psycopg2-binary
+   python3 -m venv .venv
+   source .venv/bin/activate
+   python -m pip install --upgrade pip
+   pip install -r requirements.txt
    ```
 
 2. **Normalise the raw constituent files** (reads `financial_data/russell3000/constituants_raw/*.csv`, writes to `financial_data/russell3000/constituants/` and aggregates `all_permnos.csv`):
