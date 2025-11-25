@@ -3,19 +3,24 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 import subprocess
+from pathlib import Path
 
 
 
 class QUOB:
-    def __init__(self, stocks_returns, index_returns, K, simple_corr=False):
+    def __init__(self, stocks_returns, index_returns, K, simple_corr=False, num_cores_per_controller=1, time_limit=300, distance_method='dcor'):
         #matrice et vecteur numpy
         self.stocks_returns = stocks_returns
         self.index_returns = index_returns
         self.K = K #cardinalité!!
-        self.idx = None #liste d'indice des stonks choisit 
-        
+        self.num_cores_per_controller = num_cores_per_controller
+        self.time_limit = time_limit
+        self.idx = None #liste d'indice des stonks choisit
+        self.dist_dir = Path(__file__).resolve().parent / "dist_matrix"
+        self.dist_dir.mkdir(parents=True, exist_ok=True)
+
         #construire ma matrice de distance
-        if simple_corr:
+        if simple_corr or distance_method == 'pearson':
             self.matrix_simplecor()
         else:
             self.matrix_dcor()
@@ -35,7 +40,10 @@ class QUOB:
                 dist = 1 - dcor_val
                 dcor_mat[i, j] = dcor_mat[j, i] = Welsch_function(dist) #Welsch_function(dist)
     
-        np.savetxt("dist_matrix.d", dcor_mat)
+        safe_dcor = np.nan_to_num(dcor_mat, nan=1.0, posinf=1.0, neginf=1.0)
+
+        np.savetxt(self.dist_dir / "dist_matrix.d", safe_dcor)
+        np.savetxt(self.dist_dir / "dist_matrix.adj", np.ones((n, n), dtype=int) - np.eye(n, dtype=int), fmt="%d")
         
 
 
@@ -44,10 +52,22 @@ class QUOB:
         Welsch_function = lambda x : 1 - np.exp(-0.5 * x)
 
         n = self.stocks_returns.shape[1]
-        corr_matrix = np.corrcoef(self.stocks_returns, rowvar=False)
-        
+
+        # Replace NaN/inf returns before computing correlations to avoid
+        # runtime warnings from zero-variance slices; the downstream
+        # nan_to_num keeps the distances well-defined.
+        cleaned_returns = np.nan_to_num(
+            self.stocks_returns, nan=0.0, posinf=0.0, neginf=0.0
+        )
+
+        with np.errstate(invalid="ignore", divide="ignore"):
+            corr_matrix = np.corrcoef(cleaned_returns, rowvar=False)
+
         distance_matrix = distance_func(corr_matrix)
-        np.savetxt("dist_matrix.d", Welsch_function(distance_matrix))
+        safe_distance = np.nan_to_num(distance_matrix, nan=1.0, posinf=1.0, neginf=1.0)
+
+        np.savetxt(self.dist_dir / "dist_matrix.d", Welsch_function(safe_distance))
+        np.savetxt(self.dist_dir / "dist_matrix.adj", np.ones((n, n), dtype=int) - np.eye(n, dtype=int), fmt="%d")
 
 
     def stock_picking(self, n):
@@ -56,31 +76,109 @@ class QUOB:
         param = f"""num_vars {n} #INT number of variables/nodes
                 num_k {self.K} #INT number of medoids/exemplars
                 B_scale_factor {0.0333} 0.5*(self.K+1)/n#FLOAT32 scaling factor for model bias, set to 0.5*(num_k +1)/num_vars
-                D_scale_factor 1.0 #FLOAT32 scaling factor for model distances, leave at 1 
-                problem_path /home/ubuntu/Index_Tracking/prafa/dist_matrix/
+                D_scale_factor 1.0 #FLOAT32 scaling factor for model distances, leave at 1
+                problem_path {self.dist_dir}/
                 problem_name dist_matrix
                 cost_answer -1000000 #FLOAT32 target cost to allow program to exit early if found, set to large neg value if you don't want an early exit
                 T_max 0.01 #FLOAT32 parallel tempering max temperature
                 T_min 0.00001 #FLOAT32 parallel tempering min temperature
-                time_limit 300.0 #FLOAT64 time limit for search in seconds
-                round_limit 100000000 #INT round/iteration limit for search. Search ends if no cost improvement found within a 10000 round window 
+                time_limit {float(self.time_limit)} #FLOAT64 time limit for search in seconds
+                round_limit 100000000 #INT round/iteration limit for search. Search ends if no cost improvement found within a 10000 round window
                 num_replicas_per_controller 32 #INT (POW2 only) number of replicas per parallel tempering controller
                 num_controllers 1 #INT (POW2 only) number of parallel tempering controllers
-                num_cores_per_controller 1 #INT (POW2 only) number of cores/threads to dedicate to each controller
+                num_cores_per_controller {self.num_cores_per_controller} #INT (POW2 only) number of cores/threads to dedicate to each controller
                 ladder_init_mode 2 #INT (0,1,2) parallel tempering ladder init mode. 0->linear spacing b/w t_min & t_max. 1->linear spacing between beta_max and beta_min, then translated to T. 2->exponential spacing between T_min and T_max
                 """
-        
-        with open('/home/ubuntu/Index_Tracking/prafa/dist_matrix/dist_matrix.params', "w") as f:
+
+        params_path = self.dist_dir / "dist_matrix.params"
+        with params_path.open("w") as f:
             f.write(param)
 
-        subprocess.run(['/home/ubuntu/or_tool/cmake-build/ReplicaTOR' , '/home/ubuntu/Index_Tracking/prafa/dist_matrix/dist_matrix.params'])
-        
+        replicator_binary = Path.home() / "or_tool/ReplicaTOR/cmake-build/ReplicaTOR"
+        soln_path_txt = self.dist_dir / "dist_matrix.soln.txt"
+        soln_path_noext = self.dist_dir / "dist_matrix.soln"
 
-        #lire le résultat et le mettre en liste
-        with open("/home/ubuntu/Index_Tracking/prafa/dist_matrix/dist_matrix.soln.txt", "r") as f:
-            ligne = f.read()
+        # Clear any stale solution files before running ReplicaTOR to avoid
+        # mixing past outputs with the current run.
+        soln_path_txt.unlink(missing_ok=True)
+        soln_path_noext.unlink(missing_ok=True)
 
-        return [int(x) for x in ligne.strip().split()]
+        result = subprocess.run(
+            [str(replicator_binary), str(params_path)],
+            capture_output=True,
+            text=True,
+        )
+
+        # Persist stdout for debugging and fallback parsing when no .soln file
+        # is produced by ReplicaTOR.
+        stdout = result.stdout or ""
+        (self.dist_dir / "dist_matrix_replicator_stdout.log").write_text(stdout)
+
+        if not soln_path_txt.exists() and soln_path_noext.exists():
+            soln_path_noext.rename(soln_path_txt)
+
+        def parse_medoids_from_stdout(raw_stdout):
+            marker = "K Medoid Indices:"
+            if marker not in raw_stdout:
+                return None
+
+            medoid_block = raw_stdout.split(marker, 1)[1]
+            # Stop before the cluster assignments section if present.
+            for stop_marker in ("Cluster Assignments", "FILE"):
+                if stop_marker in medoid_block:
+                    medoid_block = medoid_block.split(stop_marker, 1)[0]
+            medoids = [
+                int(x)
+                for x in medoid_block.replace("\n", " ").split()
+                if x.lstrip("-").isdigit()
+            ]
+            return medoids if len(medoids) >= self.K else None
+
+        def read_solution_numbers():
+            if not soln_path_txt.exists():
+                return None
+            numbers = [int(x) for x in soln_path_txt.read_text().strip().split() if x]
+            return numbers if numbers else None
+
+        def filter_valid(indices):
+            return [i for i in indices if 0 <= i < n]
+
+        numbers = read_solution_numbers()
+
+        # If the solution file exists but is truncated, rebuild it from stdout.
+        if numbers is not None and len(numbers) != self.K:
+            stdout_medoids = parse_medoids_from_stdout(stdout)
+            if stdout_medoids:
+                cleaned = filter_valid(stdout_medoids)
+                if cleaned:
+                    soln_path_txt.write_text(" ".join(map(str, cleaned[: self.K])))
+                    numbers = cleaned[: self.K]
+
+        if numbers is None:
+            stdout_medoids = parse_medoids_from_stdout(stdout)
+            if stdout_medoids:
+                cleaned = filter_valid(stdout_medoids)
+                if cleaned:
+                    soln_path_txt.write_text(" ".join(map(str, cleaned[: self.K])))
+                    numbers = cleaned[: self.K]
+
+        if numbers is not None:
+            numbers = filter_valid(numbers)
+
+        if numbers is None or len(numbers) < self.K:
+            stderr = result.stderr.strip()
+            raise FileNotFoundError(
+                f"ReplicaTOR solution file missing or incomplete at {soln_path_txt}.\n"
+                f"Found {len(numbers) if numbers is not None else 0} valid medoids, expected {self.K}.\n"
+                f"Return code: {result.returncode}\n"
+                f"Stdout: {stdout}\n"
+                f"Stderr: {stderr}"
+            )
+
+        numbers = numbers[: self.K]
+        soln_path_txt.write_text(" ".join(map(str, numbers)))
+
+        return numbers
 
 
     def calc_weights(self):
