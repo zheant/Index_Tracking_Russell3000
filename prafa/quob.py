@@ -8,16 +8,17 @@ from pathlib import Path
 
 
 class QUOB:
-    def __init__(self, stocks_returns, index_returns, K, simple_corr=False, num_cores_per_controller=1):
+    def __init__(self, stocks_returns, index_returns, K, simple_corr=False, num_cores_per_controller=1, time_limit=300, distance_method='dcor'):
         #matrice et vecteur numpy
         self.stocks_returns = stocks_returns
         self.index_returns = index_returns
         self.K = K #cardinalité!!
         self.num_cores_per_controller = num_cores_per_controller
+        self.time_limit = time_limit
         self.idx = None #liste d'indice des stonks choisit
-        
+
         #construire ma matrice de distance
-        if simple_corr:
+        if simple_corr or distance_method == 'pearson':
             self.matrix_simplecor()
         else:
             self.matrix_dcor()
@@ -67,7 +68,7 @@ class QUOB:
                 cost_answer -1000000 #FLOAT32 target cost to allow program to exit early if found, set to large neg value if you don't want an early exit
                 T_max 0.01 #FLOAT32 parallel tempering max temperature
                 T_min 0.00001 #FLOAT32 parallel tempering min temperature
-                time_limit 300.0 #FLOAT64 time limit for search in seconds
+                time_limit {float(self.time_limit)} #FLOAT64 time limit for search in seconds
                 round_limit 100000000 #INT round/iteration limit for search. Search ends if no cost improvement found within a 10000 round window
                 num_replicas_per_controller 32 #INT (POW2 only) number of replicas per parallel tempering controller
                 num_controllers 1 #INT (POW2 only) number of parallel tempering controllers

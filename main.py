@@ -21,6 +21,12 @@ def Main():
     parser.add_argument('--replicator_cores', type=int, default=8,
                     help='Number of OpenMP threads for ReplicaTOR (num_cores_per_controller)')
 
+    parser.add_argument('--time_limit', type=float, default=300,
+                    help='Time limit in seconds for solver runs')
+
+    parser.add_argument('--distance_method', type=str, choices=['dcor', 'pearson'], default='dcor',
+                    help='Distance metric to build correlation matrix')
+
     parser.add_argument('--cardinality', type=int, default=300)
 
     # Select the Data to Use
