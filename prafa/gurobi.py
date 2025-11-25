@@ -17,13 +17,14 @@ params = {
 
 
 class Gurobi:
-    def __init__(self, stocks_returns, index_returns, K, simple_corr=False):
+    def __init__(self, stocks_returns, index_returns, K, simple_corr=False, time_limit=300):
         #matrice et vecteur numpy
         self.stocks_returns = stocks_returns
         self.index_returns = index_returns
         self.K = K #cardinalité!!
-        self.idx = None #liste d'indice des stonks choisit 
+        self.idx = None #liste d'indice des stonks choisit
         self.simple_corr = simple_corr
+        self.time_limit = time_limit
         
         
 
@@ -75,7 +76,7 @@ class Gurobi:
         #m = gp.Model("BQO_compact")
         #m.Params.NonConvex = 2
         with gp.Env(params=params) as env, gp.Model(env=env) as m:
-            m.setParam("TimeLimit", 300)
+            m.setParam("TimeLimit", self.time_limit)
 
             z = m.addMVar(n, vtype=GRB.BINARY, name="z")
 
