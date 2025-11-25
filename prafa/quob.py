@@ -40,7 +40,9 @@ class QUOB:
                 dist = 1 - dcor_val
                 dcor_mat[i, j] = dcor_mat[j, i] = Welsch_function(dist) #Welsch_function(dist)
     
-        np.savetxt(self.dist_dir / "dist_matrix.d", dcor_mat)
+        safe_dcor = np.nan_to_num(dcor_mat, nan=1.0, posinf=1.0, neginf=1.0)
+
+        np.savetxt(self.dist_dir / "dist_matrix.d", safe_dcor)
         np.savetxt(self.dist_dir / "dist_matrix.adj", np.ones((n, n), dtype=int) - np.eye(n, dtype=int), fmt="%d")
         
 
@@ -53,7 +55,9 @@ class QUOB:
         corr_matrix = np.corrcoef(self.stocks_returns, rowvar=False)
         
         distance_matrix = distance_func(corr_matrix)
-        np.savetxt(self.dist_dir / "dist_matrix.d", Welsch_function(distance_matrix))
+        safe_distance = np.nan_to_num(distance_matrix, nan=1.0, posinf=1.0, neginf=1.0)
+
+        np.savetxt(self.dist_dir / "dist_matrix.d", Welsch_function(safe_distance))
         np.savetxt(self.dist_dir / "dist_matrix.adj", np.ones((n, n), dtype=int) - np.eye(n, dtype=int), fmt="%d")
 
 
@@ -89,7 +93,16 @@ class QUOB:
 
 
         #lire le résultat et le mettre en liste
-        with (self.dist_dir / "dist_matrix.soln.txt").open("r") as f:
+        soln_path_txt = self.dist_dir / "dist_matrix.soln.txt"
+        soln_path_noext = self.dist_dir / "dist_matrix.soln"
+
+        if not soln_path_txt.exists() and soln_path_noext.exists():
+            soln_path_noext.rename(soln_path_txt)
+
+        if not soln_path_txt.exists():
+            raise FileNotFoundError(f"ReplicaTOR solution file not found at {soln_path_txt}")
+
+        with soln_path_txt.open("r") as f:
             ligne = f.read()
 
         return [int(x) for x in ligne.strip().split()]
