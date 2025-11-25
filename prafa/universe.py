@@ -134,8 +134,10 @@ class Universe():
         return self.df_return
     
     def get_index_returns(self):
-        #retourne une série!
-        return self.df_index.squeeze()
+        # Always return a Series (never a scalar) for downstream numpy conversion.
+        if isinstance(self.df_index, pd.DataFrame):
+            return self.df_index.iloc[:, 0]
+        return pd.Series(self.df_index)
     
     def get_stock_namme_in_order(self):
         return self.df_return.columns
