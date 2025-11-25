@@ -1,0 +1,7 @@
+pandas
+numpy
+scipy
+dcor
+gurobipy
+wrds
+psycopg2-binary
