@@ -234,19 +234,46 @@ class Solution:
     
 
     def quob(self):
-        obj = QUOB(self.new_return, self.new_index, self.universe.args.cardinality)
+        obj = QUOB(
+            self.new_return,
+            self.new_index,
+            self.universe.args.cardinality,
+            num_cores_per_controller=self.universe.args.replicator_cores,
+            time_limit=self.universe.args.time_limit,
+            distance_method=self.universe.args.distance_method,
+        )
         return obj.get_weights()
-    
+
     def quob_cor(self):
-        obj = QUOB(self.new_return, self.new_index, self.universe.args.cardinality, simple_corr=True)
+        obj = QUOB(
+            self.new_return,
+            self.new_index,
+            self.universe.args.cardinality,
+            simple_corr=True,
+            num_cores_per_controller=self.universe.args.replicator_cores,
+            time_limit=self.universe.args.time_limit,
+            distance_method=self.universe.args.distance_method,
+        )
         return obj.get_weights()
 
     def gurobi(self):
-        obj = Gurobi(self.new_return, self.new_index, self.universe.args.cardinality, simple_corr=False)
+        obj = Gurobi(
+            self.new_return,
+            self.new_index,
+            self.universe.args.cardinality,
+            simple_corr=self.universe.args.distance_method == 'pearson',
+            time_limit=self.universe.args.time_limit,
+        )
         return obj.get_weights()
-    
+
     def gurobi_cor(self):
-        obj = Gurobi(self.new_return, self.new_index, self.universe.args.cardinality, simple_corr=True)
+        obj = Gurobi(
+            self.new_return,
+            self.new_index,
+            self.universe.args.cardinality,
+            simple_corr=True,
+            time_limit=self.universe.args.time_limit,
+        )
         return obj.get_weights()
 
     def lagrange_partial_forward(
