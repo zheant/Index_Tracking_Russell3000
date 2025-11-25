@@ -98,6 +98,14 @@ class QUOB:
             f.write(param)
 
         replicator_binary = Path.home() / "or_tool/ReplicaTOR/cmake-build/ReplicaTOR"
+        soln_path_txt = self.dist_dir / "dist_matrix.soln.txt"
+        soln_path_noext = self.dist_dir / "dist_matrix.soln"
+
+        # Clear any stale solution files before running ReplicaTOR to avoid
+        # mixing past outputs with the current run.
+        soln_path_txt.unlink(missing_ok=True)
+        soln_path_noext.unlink(missing_ok=True)
+
         result = subprocess.run(
             [str(replicator_binary), str(params_path)],
             capture_output=True,
@@ -108,9 +116,6 @@ class QUOB:
         # is produced by ReplicaTOR.
         stdout = result.stdout or ""
         (self.dist_dir / "dist_matrix_replicator_stdout.log").write_text(stdout)
-
-        soln_path_txt = self.dist_dir / "dist_matrix.soln.txt"
-        soln_path_noext = self.dist_dir / "dist_matrix.soln"
 
         if not soln_path_txt.exists() and soln_path_noext.exists():
             soln_path_noext.rename(soln_path_txt)
@@ -138,31 +143,45 @@ class QUOB:
             numbers = [int(x) for x in soln_path_txt.read_text().strip().split() if x]
             return numbers if numbers else None
 
+        def filter_valid(indices):
+            return [i for i in indices if 0 <= i < n]
+
         numbers = read_solution_numbers()
 
         # If the solution file exists but is truncated, rebuild it from stdout.
         if numbers is not None and len(numbers) != self.K:
             stdout_medoids = parse_medoids_from_stdout(stdout)
             if stdout_medoids:
-                soln_path_txt.write_text(" ".join(map(str, stdout_medoids[: self.K])))
-                numbers = stdout_medoids[: self.K]
+                cleaned = filter_valid(stdout_medoids)
+                if cleaned:
+                    soln_path_txt.write_text(" ".join(map(str, cleaned[: self.K])))
+                    numbers = cleaned[: self.K]
 
         if numbers is None:
             stdout_medoids = parse_medoids_from_stdout(stdout)
             if stdout_medoids:
-                soln_path_txt.write_text(" ".join(map(str, stdout_medoids[: self.K])))
-                numbers = stdout_medoids[: self.K]
+                cleaned = filter_valid(stdout_medoids)
+                if cleaned:
+                    soln_path_txt.write_text(" ".join(map(str, cleaned[: self.K])))
+                    numbers = cleaned[: self.K]
 
-        if numbers is None:
+        if numbers is not None:
+            numbers = filter_valid(numbers)
+
+        if numbers is None or len(numbers) < self.K:
             stderr = result.stderr.strip()
             raise FileNotFoundError(
-                f"ReplicaTOR solution file not found at {soln_path_txt}.\n"
+                f"ReplicaTOR solution file missing or incomplete at {soln_path_txt}.\n"
+                f"Found {len(numbers) if numbers is not None else 0} valid medoids, expected {self.K}.\n"
                 f"Return code: {result.returncode}\n"
                 f"Stdout: {stdout}\n"
                 f"Stderr: {stderr}"
             )
 
-        return numbers[: self.K]
+        numbers = numbers[: self.K]
+        soln_path_txt.write_text(" ".join(map(str, numbers)))
+
+        return numbers
 
 
     def calc_weights(self):
